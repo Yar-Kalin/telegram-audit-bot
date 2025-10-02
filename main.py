@@ -1,15 +1,16 @@
 import telebot
-import openai
 import os
+import requests
 
-# === Получаем токены из переменных окружения ===
+# === Получаем токены ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")  # Новый ключ
 
+# Проверка
 if not TELEGRAM_TOKEN:
     print("❌ ОШИБКА: Не найден TELEGRAM_TOKEN")
-if not OPENAI_API_KEY:
-    print("❌ ОШИБКА: Не найден OPENAI_API_KEY")
+if not DEEPSEEK_API_KEY:
+    print("❌ ОШИБКА: Не найден DEEPSEEK_API_KEY")
 
 # Инициализация бота
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -39,27 +40,30 @@ def audit(message):
         )
         return
 
-    # Отправляем уведомление
     bot.send_message(message.chat.id, "🔍 Генерирую SEO/UX-аудит для сайта: " + url)
 
-    # Генерация отчёта через ChatGPT
+    # Генерация отчёта через DeepSeek
     try:
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{
-                "role": "user",
-                "content": f"Проанализируй сайт {url} и дай 10 SEO/UX рекомендаций. "
-                           "Формат: Номер. [Категория] — Заголовок • Проблема: ... • Решение: ..."
-            }],
-            max_tokens=800
-        )
-        report = response.choices[0].message.content
+        headers = {
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "user", "content": f"Проанализируй сайт {url} и дай 10 SEO/UX рекомендаций. "
+                                           "Формат: Номер. [Категория] — Заголовок • Проблема: ... • Решение: ..."}
+            ],
+            "max_tokens": 800
+        }
+        response = requests.post("https://api.deepseek.com/v1/chat/completions", json=data, headers=headers)
+        result = response.json()
+        report = result['choices'][0]['message']['content']
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ Ошибка при генерации отчёта: {e}")
         return
 
-    # Отправка отчёта пользователю
+    # Отправка отчёта
     try:
         bot.send_message(message.chat.id, f"📌 *SEO/UX Аудит сайта {url}:*\n\n{report}", parse_mode="Markdown")
     except:
@@ -70,10 +74,9 @@ def audit(message):
     bot.send_message(
         message.chat.id,
         "✅ Аудит завершён!\n\n"
-        "📩 Хотите глубокий анализ или консультацию?\n"
-        "Напишите мне в личные сообщения: @ваш_ник"
+        "📩 Хотите глубокий анализ?\n"
+        "Напишите мне: @ваш_ник"
     )
 
-# === ЗАПУСК БОТА ===
 print("🚀 Бот запущен...")
 bot.polling(none_stop=True)
